@@ -127,14 +127,12 @@ fun ProfileScreen() {
 @Composable
 fun ProfileHeader(name: String, nim: String, bio: String) {
     val context = LocalContext.current
-
-    // Mengambil gambar dari folder assets secara manual
     val bitmap = remember {
         try {
             val inputStream = context.assets.open("foto_profil.jpg")
             BitmapFactory.decodeStream(inputStream).asImageBitmap()
         } catch (e: Exception) {
-            null // Jika file tidak ketemu
+            null // file kalo not found
         }
     }
 
@@ -154,7 +152,6 @@ fun ProfileHeader(name: String, nim: String, bio: String) {
                     contentScale = ContentScale.Crop
                 )
             } else {
-                // Placeholder jika file di assets tidak terbaca
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = null,
