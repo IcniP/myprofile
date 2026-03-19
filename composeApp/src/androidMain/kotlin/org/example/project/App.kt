@@ -32,11 +32,8 @@ import kotlinx.coroutines.flow.update
 
 @Composable
 fun App() {
-    // Inisialisasi ViewModel
     val viewModel = remember { ProfileViewModel() }
     val uiState by viewModel.uiState.collectAsState()
-
-    // Pengaturan Dark Mode Dinamis
     val colors = if (uiState.isDarkMode) darkColorScheme() else lightColorScheme(
         primary = Color(0xFF1E88E5),
         surfaceVariant = Color(0xFFF5F5F5)
@@ -57,7 +54,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Fitur Dark Mode Toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -79,7 +75,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Form Edit Profile (Muncul saat Edit Mode Aktif)
         AnimatedVisibility(visible = uiState.isEditMode) {
             Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -112,7 +107,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Tombol Toggle Edit/Save
             Button(
                 onClick = { viewModel.toggleEditMode() },
                 modifier = Modifier.weight(1f),
@@ -125,7 +119,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
                 Text(if (uiState.isEditMode) "Save" else "Edit Profile")
             }
 
-            // Tombol Github
             OutlinedButton(
                 onClick = { uriHandler.openUri("https://github.com/IcniP") },
                 modifier = Modifier.weight(1f)
