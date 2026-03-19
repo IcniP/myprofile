@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import androidx.lifecycle.ViewModel
 
-// 1. UI State (Model)
 data class ProfileUiState(
     val name: String = "Muhammad Farisi Suyitno",
     val nim: String = "123140152",
@@ -18,7 +17,6 @@ data class ProfileUiState(
     val isEditMode: Boolean = false
 )
 
-// 2. ViewModel (Logic)
 class ProfileViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
