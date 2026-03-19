@@ -1,8 +1,7 @@
 package org.example.project
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+
+import android.graphics.BitmapFactory
+import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,115 +9,128 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.asImageBitmap
-import android.graphics.BitmapFactory
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
-import org.example.project.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 @Composable
 fun App() {
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Color(0xFF1E88E5),
-            secondary = Color(0xFF26A69A),
-            surfaceVariant = Color(0xFFF5F5F5)
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            ProfileScreen()
+    // Inisialisasi ViewModel
+    val viewModel = remember { ProfileViewModel() }
+    val uiState by viewModel.uiState.collectAsState()
+
+    // Pengaturan Dark Mode Dinamis
+    val colors = if (uiState.isDarkMode) darkColorScheme() else lightColorScheme(
+        primary = Color(0xFF1E88E5),
+        surfaceVariant = Color(0xFFF5F5F5)
+    )
+
+    MaterialTheme(colorScheme = colors) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            ProfileScreen(viewModel, uiState)
         }
     }
 }
 
 @Composable
-fun ProfileScreen() {
-    var isVisible by remember { mutableStateOf(false) }
+fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
     val uriHandler = LocalUriHandler.current
 
-    LaunchedEffect(Unit) {
-        isVisible = true
-    }
-
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AnimatedVisibility(
-            visible = isVisible,
-            enter = fadeIn() + slideInVertically()
+        // Fitur Dark Mode Toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                ProfileHeader(
-                    name = "Muhammad Farisi Suyitno",
-                    nim = "123140152",
-                    bio = "I Love Racing."
+            Icon(Icons.Default.Brightness4, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = uiState.isDarkMode,
+                onCheckedChange = { viewModel.toggleDarkMode(it) }
+            )
+        }
+
+        ProfileHeader(
+            name = uiState.name,
+            nim = uiState.nim,
+            bio = uiState.bio
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Form Edit Profile (Muncul saat Edit Mode Aktif)
+        AnimatedVisibility(visible = uiState.isEditMode) {
+            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Edit Profile", fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = uiState.name,
+                        onValueChange = { viewModel.updateName(it) },
+                        label = { Text("Nama") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = uiState.bio,
+                        onValueChange = { viewModel.updateBio(it) },
+                        label = { Text("Bio") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        ProfileCard {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Informasi Kontak", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                InfoItem(Icons.Default.Email, "Email", uiState.email)
+                InfoItem(Icons.Default.Phone, "Phone", uiState.phone)
+                InfoItem(Icons.Default.LocationOn, "Location", uiState.location)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Tombol Toggle Edit/Save
+            Button(
+                onClick = { viewModel.toggleEditMode() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (uiState.isEditMode) Color.Green else MaterialTheme.colorScheme.primary
                 )
+            ) {
+                Icon(if (uiState.isEditMode) Icons.Default.Check else Icons.Default.Edit, null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (uiState.isEditMode) "Save" else "Edit Profile")
+            }
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                ProfileCard {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "Informasi Kontak",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        InfoItem(
-                            icon = Icons.Default.Email,
-                            label = "Email",
-                            value = "muhammad.123140152@student.itera.ac.id"
-                        )
-                        InfoItem(
-                            icon = Icons.Default.Phone,
-                            label = "Phone",
-                            value = "08123"
-                        )
-                        InfoItem(
-                            icon = Icons.Default.LocationOn,
-                            label = "Location",
-                            value = "Bandar Lampung"
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Button(
-                    onClick = {
-                        uriHandler.openUri("https://github.com/IcniP")
-                    },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Github")
-                }
+            // Tombol Github
+            OutlinedButton(
+                onClick = { uriHandler.openUri("https://github.com/IcniP") },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Github")
             }
         }
     }
@@ -127,48 +139,29 @@ fun ProfileScreen() {
 @Composable
 fun ProfileHeader(name: String, nim: String, bio: String) {
     val context = LocalContext.current
-
-    // Mengambil gambar dari folder assets secara manual
-    val bitmap = remember {
+    val bitmap = remember(context) {
         try {
             val inputStream = context.assets.open("foto_profil.jpg")
             BitmapFactory.decodeStream(inputStream).asImageBitmap()
-        } catch (e: Exception) {
-            null // Jika file tidak ketemu
-        }
+        } catch (e: Exception) { null }
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            modifier = Modifier
-                .size(130.dp)
-                .clip(CircleShape)
+            modifier = Modifier.size(120.dp).clip(CircleShape)
                 .border(4.dp, MaterialTheme.colorScheme.primary, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             if (bitmap != null) {
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = "Profile Photo",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                Image(bitmap = bitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                // Placeholder jika file di assets tidak terbaca
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = Color.LightGray
-                )
+                Icon(Icons.Default.Person, null, modifier = Modifier.size(70.dp), tint = Color.LightGray)
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("NIM: $nim", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(bio, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(12.dp))
+        Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text("NIM: $nim", color = Color.Gray)
+        Text(bio, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -177,39 +170,19 @@ fun ProfileCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        content()
-    }
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) { content() }
 }
 
 @Composable
 fun InfoItem(icon: ImageVector, label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
         Column {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.Gray
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }
     }
 }
