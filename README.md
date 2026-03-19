@@ -1,27 +1,10 @@
-This is a Kotlin Multiplatform project targeting Android.
+123140152
+muhammad farisi Suyitno 
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+lanjutan dari kode kemarin ada dark mode dan bisa edit bio
 
-### Build and Run Android Application
+<img width="1440" height="2200" alt="image" src="https://github.com/user-attachments/assets/3d7dfa25-6a52-4630-bfb0-db178decc7dc" />
 
-To build and run the development version of the Android app, use the run configuration from the run widget
-in your IDE’s toolbar or build it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:assembleDebug
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:assembleDebug
-  ```
+<img width="1440" height="2200" alt="image" src="https://github.com/user-attachments/assets/1aab1102-0b2b-4ae9-a06f-eeec82ec67b7" />
 
----
-
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+<img width="1440" height="2200" alt="image" src="https://github.com/user-attachments/assets/49238a06-2ad1-4ac4-869a-e24b3184f044" />
