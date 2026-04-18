@@ -30,7 +30,9 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(compose.materialIconsExtended)
-            implementation("org.jetbrains.androidx.navigation:navigation-compose:2.8.0-alpha02") // atau versi terbaru
+            implementation("org.jetbrains.androidx.navigation:navigation-compose:2.8.0-alpha02")
+            implementation("io.coil-kt.coil3:coil-compose:3.0.0-rc01")
+            implementation("org.json:json:20231013")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
