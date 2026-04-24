@@ -14,12 +14,14 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
-    
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
+            implementation("io.insert-koin:koin-android:3.5.3")
         }
+
         commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -31,9 +33,12 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(compose.materialIconsExtended)
             implementation("org.jetbrains.androidx.navigation:navigation-compose:2.8.0-alpha02")
+            implementation("io.insert-koin:koin-compose:1.1.2")
+            implementation("io.insert-koin:koin-core:3.5.3")
             implementation("io.coil-kt.coil3:coil-compose:3.0.0-rc01")
             implementation("org.json:json:20231013")
         }
+
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
@@ -51,16 +56,19 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -70,5 +78,3 @@ android {
 dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
-
-
