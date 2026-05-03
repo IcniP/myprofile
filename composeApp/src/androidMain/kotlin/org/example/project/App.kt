@@ -3,7 +3,6 @@ package org.example.project
 import android.graphics.BitmapFactory
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,11 +33,19 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import org.koin.compose.KoinContext
 import org.koin.compose.koinInject
 import org.koin.dsl.module
+
 
 interface DeviceInfo {
     fun getModel(): String
@@ -46,10 +53,67 @@ interface DeviceInfo {
 }
 
 interface NetworkMonitor {
-    val isConnected: Flow<Boolean> // Ngirim data terus menerus
+    val isConnected: Flow<Boolean>
 }
 
-data class Note(val id: Int, val title: String, val content: String, val isFavorite: Boolean = false, val createdAt: Long = System.currentTimeMillis())
+class GeminiService(private val apiKey: String) {
+    private val client = HttpClient()
+
+    suspend fun summarizeNotes(notes: List<Note>): String = withContext(Dispatchers.IO) {
+        if (notes.isEmpty()) return@withContext "Belum ada catatan untuk dirangkum."
+
+        val contentText = notes.joinToString("\\n") {
+            "${it.title}: ${it.content}".replace("\"", "\\\"")
+        }
+
+        val prompt = "Rangkum catatan berikut dan list deadline tanggalnya jika ada: $contentText"
+        val jsonBody = """
+            {
+                "contents": [{
+                    "parts": [{
+                        "text": "$prompt"
+                    }]
+                }]
+            }
+        """.trimIndent()
+
+        try {
+            val url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=$apiKey"
+
+            val response = client.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+            if (response.status == HttpStatusCode.NotFound) {
+                return@withContext "Error 404: Alamat model salah. Pastikan model 'gemini-1.5-flash' tersedia di region kamu."
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                return@withContext "Gagal (${response.status.value}): ${response.bodyAsText()}"
+            }
+
+            val jsonResponse = JSONObject(response.bodyAsText())
+            jsonResponse.getJSONArray("candidates")
+                .getJSONObject(0)
+                .getJSONObject("content")
+                .getJSONArray("parts")
+                .getJSONObject(0)
+                .getString("text")
+        } catch (e: Exception) {
+            "Gagal memproses AI: ${e.message}"
+        }
+    }
+}
+
+
+data class Note(
+    val id: Int,
+    val title: String,
+    val content: String,
+    val isFavorite: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 data class HistoryItem(val title: String, val route: String, val timestamp: Long = System.currentTimeMillis())
 
 sealed class Screen(val route: String, val title: String) {
@@ -63,13 +127,11 @@ sealed class Screen(val route: String, val title: String) {
     }
 }
 
-val appModule = module {
-    single { ProfileViewModel(get(), get()) }
-}
 
 class ProfileViewModel(
     private val deviceInfo: DeviceInfo,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val aiService: GeminiService
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState(
         deviceModel = deviceInfo.getModel(),
@@ -85,6 +147,14 @@ class ProfileViewModel(
         }
     }
 
+    fun generateAiSummary() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAiLoading = true) }
+            val summary = aiService.summarizeNotes(_uiState.value.notes)
+            _uiState.update { it.copy(aiSummary = summary, isAiLoading = false) }
+        }
+    }
+
     fun updateName(n: String) { _uiState.update { it.copy(name = n) } }
     fun updateBio(b: String) { _uiState.update { it.copy(bio = b) } }
     fun toggleDarkMode(v: Boolean) { _uiState.update { it.copy(isDarkMode = v) } }
@@ -95,18 +165,29 @@ class ProfileViewModel(
         _uiState.update { it.copy(notes = it.notes + n) }
         applyFilterAndSort()
     }
-    fun deleteNote(id: Int) { _uiState.update { s -> s.copy(notes = s.notes.filter { it.id != id }) }; applyFilterAndSort() }
-    fun toggleFavorite(id: Int) { _uiState.update { s -> s.copy(notes = s.notes.map { if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it }) }; applyFilterAndSort() }
-    fun updateSearch(q: String) { _uiState.update { it.copy(searchQuery = q) }; applyFilterAndSort() }
-    fun updateSort(order: String) { _uiState.update { it.copy(sortOrder = order) }; applyFilterAndSort() }
+
+    fun deleteNote(id: Int) {
+        _uiState.update { s -> s.copy(notes = s.notes.filter { it.id != id }) }
+        applyFilterAndSort()
+    }
+
+    fun toggleFavorite(id: Int) {
+        _uiState.update { s -> s.copy(notes = s.notes.map { if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it }) }
+        applyFilterAndSort()
+    }
+
+    fun updateSearch(q: String) {
+        _uiState.update { it.copy(searchQuery = q) }
+        applyFilterAndSort()
+    }
 
     private fun applyFilterAndSort() {
         _uiState.update { s ->
             val filtered = s.notes.filter { it.title.contains(s.searchQuery, true) || it.content.contains(s.searchQuery, true) }
-            val sorted = if (s.sortOrder == "latest") filtered.sortedByDescending { it.createdAt } else filtered.sortedBy { it.createdAt }
-            s.copy(filteredNotes = sorted)
+            s.copy(filteredNotes = filtered.sortedByDescending { it.createdAt })
         }
     }
+
     fun addHistory(title: String, route: String) {
         _uiState.update { s ->
             val newList = s.history.toMutableList()
@@ -130,11 +211,18 @@ data class ProfileUiState(
     val filteredNotes: List<Note> = emptyList(),
     val history: List<HistoryItem> = emptyList(),
     val searchQuery: String = "",
-    val sortOrder: String = "latest",
     val deviceModel: String = "",
     val deviceOS: String = "",
-    val isOnline: Boolean = true
+    val isOnline: Boolean = true,
+    val aiSummary: String = "",
+    val isAiLoading: Boolean = false
 )
+
+
+val appModule = module {
+    single { GeminiService("AIzaSyDayOTb5ef-4Z85KYZixrcH38LMtCOA984") }
+    single { ProfileViewModel(get(), get(), get()) }
+}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -175,7 +263,6 @@ fun App() {
                             items(uiState.history.reversed()) { item ->
                                 NavigationDrawerItem(label = { Text(item.title) }, selected = false, onClick = { scope.launch { drawerState.close(); navController.navigate(item.route) } }, icon = { Icon(Icons.Default.History, null) })
                             }
-                            item { NavigationDrawerItem(label = { Text("Settings") }, selected = false, onClick = { scope.launch { drawerState.close(); navController.navigate(Screen.Settings.route) } }, icon = { Icon(Icons.Default.Settings, null) }) }
                         }
                     }
                 }
@@ -184,7 +271,7 @@ fun App() {
                     topBar = {
                         Column {
                             CenterAlignedTopAppBar(
-                                title = { Text("Farisi Gacor Pro") },
+                                title = { Text("Farisi AI Gacor") },
                                 navigationIcon = { IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = null) } }
                             )
                             NetworkStatusIndicator(uiState.isOnline)
@@ -194,8 +281,17 @@ fun App() {
                         NavigationBar {
                             val navEntry by navController.currentBackStackEntryAsState()
                             val current = navEntry?.destination?.route
-                            listOf(Triple("Notes", Screen.Notes.route, Icons.Default.Description), Triple("Favs", Screen.Favorites.route, Icons.Default.Favorite), Triple("Profile", Screen.Profile.route, Icons.Default.Person)).forEach { (label, route, icon) ->
-                                NavigationBarItem(selected = current == route, onClick = { navController.navigate(route) { popUpTo(navController.graph.startDestinationId); launchSingleTop = true } }, label = { Text(label) }, icon = { Icon(icon, null) })
+                            listOf(
+                                Triple("Notes", Screen.Notes.route, Icons.Default.Description),
+                                Triple("Favs", Screen.Favorites.route, Icons.Default.Favorite),
+                                Triple("Profile", Screen.Profile.route, Icons.Default.Person)
+                            ).forEach { (label, route, icon) ->
+                                NavigationBarItem(
+                                    selected = current == route,
+                                    onClick = { navController.navigate(route) { popUpTo(navController.graph.startDestinationId); launchSingleTop = true } },
+                                    label = { Text(label) },
+                                    icon = { Icon(icon, null) }
+                                )
                             }
                         }
                     },
@@ -222,6 +318,7 @@ fun App() {
     }
 }
 
+
 @Composable
 fun NetworkStatusIndicator(isOnline: Boolean) {
     Surface(color = if (isOnline) Color(0xFF4CAF50) else Color(0xFFF44336)) {
@@ -236,10 +333,36 @@ fun NetworkStatusIndicator(isOnline: Boolean) {
 @Composable
 fun NotesScreen(navController: NavHostController, viewModel: ProfileViewModel, uiState: ProfileUiState) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("AI Summary & Deadline", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    if (uiState.isAiLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Button(onClick = { viewModel.generateAiSummary() }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                            Text("Summarize", fontSize = 11.sp)
+                        }
+                    }
+                }
+                if (uiState.aiSummary.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(uiState.aiSummary, fontSize = 12.sp, lineHeight = 16.sp)
+                }
+            }
+        }
+
         OutlinedTextField(value = uiState.searchQuery, onValueChange = { viewModel.updateSearch(it) }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Search...") }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(12.dp))
-        Spacer(modifier = Modifier.height(16.dp))
-        if (uiState.filteredNotes.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No notes found.") }
-        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(uiState.filteredNotes) { note ->
                 NoteItem(note, { navController.navigate(Screen.NoteDetail.createRoute(note.id)) }, { viewModel.toggleFavorite(note.id) }, { viewModel.deleteNote(note.id) })
             }
@@ -265,8 +388,9 @@ fun NoteItem(note: Note, onNoteClick: () -> Unit, onFavClick: () -> Unit, onDele
 fun FavoritesScreen(navController: NavHostController, viewModel: ProfileViewModel, uiState: ProfileUiState) {
     val favs = uiState.notes.filter { it.isFavorite }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Favorites", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        if (favs.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No favorites.") }
+        Text("Favorit", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        if (favs.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Belum ada favorit.") }
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(favs) { note -> NoteItem(note, { navController.navigate(Screen.NoteDetail.createRoute(note.id)) }, { viewModel.toggleFavorite(note.id) }, { viewModel.deleteNote(note.id) }) }
         }
@@ -278,9 +402,9 @@ fun AddNoteScreen(navController: NavHostController, viewModel: ProfileViewModel)
     var t by remember { mutableStateOf("") }; var c by remember { mutableStateOf("") }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, null) }
-        OutlinedTextField(t, { t = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(c, { c = it }, label = { Text("Content") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
-        Button(onClick = { if (t.isNotBlank()) { viewModel.addNote(t, c); navController.popBackStack() } }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Save") }
+        OutlinedTextField(t, { t = it }, label = { Text("Judul") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(c, { c = it }, label = { Text("Konten") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+        Button(onClick = { if (t.isNotBlank()) { viewModel.addNote(t, c); navController.popBackStack() } }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Simpan") }
     }
 }
 
@@ -296,7 +420,6 @@ fun NoteDetailScreen(navController: NavHostController, viewModel: ProfileViewMod
 
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
-    val uri = LocalUriHandler.current
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ProfileHeader(uiState.name, uiState.nim, uiState.bio)
         Spacer(modifier = Modifier.height(16.dp))
@@ -314,8 +437,7 @@ fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
             }
         }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.toggleEditMode() }, modifier = Modifier.weight(1f)) { Text(if (uiState.isEditMode) "Save" else "Edit") }
-            OutlinedButton(onClick = { uri.openUri("https://github.com/IcniP") }, modifier = Modifier.weight(1f)) { Text("Github") }
+            Button(onClick = { viewModel.toggleEditMode() }, modifier = Modifier.weight(1f)) { Text(if (uiState.isEditMode) "Simpan" else "Edit") }
         }
     }
 }
@@ -327,22 +449,14 @@ fun SettingsScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
         Spacer(modifier = Modifier.height(24.dp))
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Device Information", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text("Model: ${uiState.deviceModel}", fontSize = 14.sp)
-                Text("OS: ${uiState.deviceOS}", fontSize = 14.sp)
+                Text("Device Info", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Model: ${uiState.deviceModel}")
+                Text("OS: ${uiState.deviceOS}")
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Sort Order", fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(uiState.sortOrder == "latest", { viewModel.updateSort("latest") })
-            Text("Latest")
-            RadioButton(uiState.sortOrder == "oldest", { viewModel.updateSort("oldest") })
-            Text("Oldest")
-        }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Dark Mode", modifier = Modifier.weight(1f))
+            Text("Mode Gelap", modifier = Modifier.weight(1f))
             Switch(uiState.isDarkMode, { viewModel.toggleDarkMode(it) })
         }
     }

@@ -37,6 +37,10 @@ kotlin {
             implementation("io.insert-koin:koin-core:3.5.3")
             implementation("io.coil-kt.coil3:coil-compose:3.0.0-rc01")
             implementation("org.json:json:20231013")
+            implementation("io.ktor:ktor-client-core:2.3.11")
+            implementation("io.ktor:ktor-client-android:2.3.11")
+            implementation("io.ktor:ktor-client-content-negotiation:2.3.11")
+            implementation("org.json:json:20231013")
         }
 
         commonTest.dependencies {
