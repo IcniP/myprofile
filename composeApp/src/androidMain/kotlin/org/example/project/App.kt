@@ -46,6 +46,7 @@ import org.koin.compose.KoinContext
 import org.koin.compose.koinInject
 import org.koin.dsl.module
 
+// --- 1. INTERFACES ---
 
 interface DeviceInfo {
     fun getModel(): String
@@ -55,6 +56,31 @@ interface DeviceInfo {
 interface NetworkMonitor {
     val isConnected: Flow<Boolean>
 }
+
+// --- 2. DATA MODELS ---
+
+data class Note(
+    val id: Int,
+    val title: String,
+    val content: String,
+    val isFavorite: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+data class HistoryItem(val title: String, val route: String, val timestamp: Long = System.currentTimeMillis())
+
+sealed class Screen(val route: String, val title: String) {
+    object Notes : Screen("notes", "Notes")
+    object Favorites : Screen("favorites", "Favorite")
+    object Profile : Screen("profile", "My Profile")
+    object AddNote : Screen("add_note", "Add Notes")
+    object Settings : Screen("settings", "Settings")
+    object NoteDetail : Screen("note_detail/{noteId}", "Note Details") {
+        fun createRoute(noteId: Int) = "note_detail/$noteId"
+    }
+}
+
+// --- 3. SERVICES ---
 
 class GeminiService(private val apiKey: String) {
     private val client = HttpClient()
@@ -78,14 +104,16 @@ class GeminiService(private val apiKey: String) {
         """.trimIndent()
 
         try {
-            val url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=$apiKey"
+            // Menggunakan gemini-1.5-flash untuk stabilitas di region Indonesia
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
 
             val response = client.post(url) {
                 contentType(ContentType.Application.Json)
                 setBody(jsonBody)
             }
+
             if (response.status == HttpStatusCode.NotFound) {
-                return@withContext "Error 404: Alamat model salah. Pastikan model 'gemini-1.5-flash' tersedia di region kamu."
+                return@withContext "Error 404: Model tidak ditemukan. Pastikan API Key di-enable untuk Gemini 1.5 Flash."
             }
 
             if (response.status != HttpStatusCode.OK) {
@@ -105,28 +133,7 @@ class GeminiService(private val apiKey: String) {
     }
 }
 
-
-data class Note(
-    val id: Int,
-    val title: String,
-    val content: String,
-    val isFavorite: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
-)
-
-data class HistoryItem(val title: String, val route: String, val timestamp: Long = System.currentTimeMillis())
-
-sealed class Screen(val route: String, val title: String) {
-    object Notes : Screen("notes", "Notes")
-    object Favorites : Screen("favorites", "Favorite")
-    object Profile : Screen("profile", "My Profile")
-    object AddNote : Screen("add_note", "Add Notes")
-    object Settings : Screen("settings", "Settings")
-    object NoteDetail : Screen("note_detail/{noteId}", "Note Details") {
-        fun createRoute(noteId: Int) = "note_detail/$noteId"
-    }
-}
-
+// --- 4. VIEWMODEL ---
 
 class ProfileViewModel(
     private val deviceInfo: DeviceInfo,
@@ -218,12 +225,14 @@ data class ProfileUiState(
     val isAiLoading: Boolean = false
 )
 
+// --- 5. DEPENDENCY INJECTION ---
 
 val appModule = module {
     single { GeminiService("AIzaSyDayOTb5ef-4Z85KYZixrcH38LMtCOA984") }
     single { ProfileViewModel(get(), get(), get()) }
 }
 
+// --- 6. UI COMPONENTS ---
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -317,7 +326,6 @@ fun App() {
         }
     }
 }
-
 
 @Composable
 fun NetworkStatusIndicator(isOnline: Boolean) {
@@ -420,6 +428,7 @@ fun NoteDetailScreen(navController: NavHostController, viewModel: ProfileViewMod
 
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
+    val uri = LocalUriHandler.current
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ProfileHeader(uiState.name, uiState.nim, uiState.bio)
         Spacer(modifier = Modifier.height(16.dp))
@@ -438,6 +447,7 @@ fun ProfileScreen(viewModel: ProfileViewModel, uiState: ProfileUiState) {
         }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { viewModel.toggleEditMode() }, modifier = Modifier.weight(1f)) { Text(if (uiState.isEditMode) "Simpan" else "Edit") }
+            OutlinedButton(onClick = { uri.openUri("https://github.com/IcniP") }, modifier = Modifier.weight(1f)) { Text("Github") }
         }
     }
 }

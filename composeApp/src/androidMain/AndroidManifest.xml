@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="News Reader Farisi"
+        android:label="Notepad"
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:supportsRtl="true">
